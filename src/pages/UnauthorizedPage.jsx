@@ -1,2 +1,0 @@
-import { Link } from 'react-router-dom'
-export default function UnauthorizedPage(){return <div className="min-h-[70vh] grid place-items-center"><div className="text-center"><div className="text-6xl mb-4">403</div><h1 className="text-2xl font-semibold dark:text-white">Access denied</h1><p className="text-slate-500 mt-2 mb-5">Your role does not allow this action.</p><Link className="primary inline-block" to="/">Back home</Link></div></div>}

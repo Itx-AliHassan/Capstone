@@ -1,5 +1,368 @@
-import {useMemo,useState} from 'react';import {CalendarDays,Columns3,List,Plus,Filter,SlidersHorizontal,Archive,Trash2,Copy,ChevronDown,GripVertical} from 'lucide-react';import {useParams} from 'react-router-dom';import {useWorkspace} from '../context/WorkspaceContext';import {usePermission} from '../hooks/usePermission';import TaskModal from '../components/TaskModal';import ConfirmDialog from '../components/ConfirmDialog';import Modal from '../components/Modal';
-export default function ProjectPage(){const{projectId}=useParams();const{projects,tasks,addTask,updateTask,updateProject,deleteProject,archiveProject,bulkUpdate}=useWorkspace();const{canEdit,canAdmin}=usePermission();const project=projects.find(p=>p.id===projectId)||projects[0];const [view,setView]=useState(()=>localStorage.getItem(`wm-view-${project?.id}`)||project?.defaultView||'kanban');const [selected,setSelected]=useState(null);const [query,setQuery]=useState('');const [filters,setFilters]=useState({status:'all',priority:'all',assignee:'all',label:'all',from:'',to:'',sort:'created'});const [group,setGroup]=useState('none');const [presets,setPresets]=useState(()=>JSON.parse(localStorage.getItem('wm-presets')||'[]'));const [checked,setChecked]=useState([]);const [confirm,setConfirm]=useState(null);const [colModal,setColModal]=useState(false);const [newCol,setNewCol]=useState('');const list=tasks.filter(t=>t.projectId===project?.id);const members=(project?.memberIds||[]);const labels=[...new Set(list.flatMap(t=>t.labels||[]))];const visible=useMemo(()=>{let x=list.filter(t=>`${t.title} ${t.description} ${(t.labels||[]).join(' ')}`.toLowerCase().includes(query.toLowerCase()));x=x.filter(t=>(filters.status==='all'||t.status===filters.status)&&(filters.priority==='all'||t.priority===filters.priority)&&(filters.assignee==='all'||t.assigneeId===filters.assignee)&&(filters.label==='all'||(t.labels||[]).includes(filters.label))&&(!filters.from||t.dueDate>=filters.from)&&(!filters.to||t.dueDate<=filters.to));x.sort((a,b)=>filters.sort==='due'?(a.dueDate||'9999').localeCompare(b.dueDate||'9999'):filters.sort==='priority'?['Urgent','High','Medium','Low'].indexOf(a.priority)-['Urgent','High','Medium','Low'].indexOf(b.priority):filters.sort==='alpha'?a.title.localeCompare(b.title):new Date(b.createdAt)-new Date(a.createdAt));return x},[list,query,filters]);function switchView(v){setView(v);localStorage.setItem(`wm-view-${project.id}`,v)}function create(){addTask({projectId:project.id,status:project.columns[0]})}function toggle(id){setChecked(x=>x.includes(id)?x.filter(i=>i!==id):[...x,id])}function addColumn(){if(!newCol.trim())return;updateProject(project.id,{columns:[...project.columns,newCol.trim()]});setNewCol('');setColModal(false)}if(!project)return <div className="empty">No project found.</div>;return <div className="space-y-5"><div className="flex flex-col lg:flex-row lg:items-end justify-between gap-4"><div><div className="text-xs text-slate-400">Project</div><h1 className="text-2xl font-semibold dark:text-white">{project.icon} {project.name}</h1><p className="text-sm text-slate-500 mt-1">{project.description}</p></div><div className="flex flex-wrap gap-2">{[['kanban',Columns3],['list',List],['calendar',CalendarDays]].map(([v,I])=><button key={v} onClick={()=>switchView(v)} className={`icon-btn ${view===v?'bg-slate-900 text-white dark:bg-white dark:text-slate-900':''}`}><I size={17}/></button>)}{canEdit&&<button className="primary" onClick={create}><Plus size={16}/> Task</button>}{canAdmin&&<button className="secondary" onClick={()=>setColModal(true)}><SlidersHorizontal size={16}/> Columns</button>}</div></div><div className="card p-3 flex flex-wrap gap-2 items-center"><input value={query} onChange={e=>setQuery(e.target.value)} className="field max-w-xs" placeholder="Search tasks…"/><select className="field w-auto" value={filters.status} onChange={e=>setFilters({...filters,status:e.target.value})}><option value="all">All status</option>{project.columns.map(c=><option key={c}>{c}</option>)}</select><select className="field w-auto" value={filters.priority} onChange={e=>setFilters({...filters,priority:e.target.value})}><option value="all">All priority</option>{['Urgent','High','Medium','Low'].map(x=><option key={x}>{x}</option>)}</select><select className="field w-auto" value={filters.assignee} onChange={e=>setFilters({...filters,assignee:e.target.value})}><option value="all">All assignees</option>{members.map(id=><option key={id} value={id}>{id}</option>)}</select><select className="field w-auto" value={filters.label} onChange={e=>setFilters({...filters,label:e.target.value})}><option value="all">All labels</option>{labels.map(x=><option key={x}>{x}</option>)}</select><input type="date" className="field w-auto" value={filters.from} onChange={e=>setFilters({...filters,from:e.target.value})}/><input type="date" className="field w-auto" value={filters.to} onChange={e=>setFilters({...filters,to:e.target.value})}/><select className="field w-auto" value={filters.sort} onChange={e=>setFilters({...filters,sort:e.target.value})}><option value="created">Newest</option><option value="due">Due date</option><option value="priority">Priority</option><option value="alpha">Alphabetical</option></select><button className="secondary" onClick={()=>{const n=prompt('Preset name');if(n){const next=[...presets,{name:n,filters,group}];setPresets(next);localStorage.setItem('wm-presets',JSON.stringify(next))}}}>Save filter</button><select className="field w-auto" value={group} onChange={e=>setGroup(e.target.value)}><option value="none">No grouping</option><option value="assignee">Group assignee</option><option value="status">Group status</option><option value="priority">Group priority</option><option value="label">Group label</option></select>{presets.length>0&&<select className="field w-auto" defaultValue="" onChange={e=>{const p=presets.find(x=>x.name===e.target.value);if(p){setFilters(p.filters);setGroup(p.group)}}}><option value="">Saved presets</option>{presets.map(p=><option key={p.name}>{p.name}</option>)}</select>}</div>{checked.length>0&&<div className="card p-3 flex flex-wrap gap-2 items-center"><b className="text-sm">{checked.length} selected</b><button className="secondary" onClick={()=>bulkUpdate(checked,{status:project.columns.at(-1)})}>Mark done</button><select className="field w-auto" onChange={e=>e.target.value&&bulkUpdate(checked,{assigneeId:e.target.value})}><option value="">Assign…</option>{members.map(id=><option key={id}>{id}</option>)}</select><button className="danger" onClick={()=>setConfirm({type:'bulk'})}>Delete selected</button></div>}{view==='kanban'&&<Kanban project={project} tasks={visible} canEdit={canEdit} onOpen={setSelected}/>} {view==='list'&&<ListView tasks={visible} group={group} checked={checked} toggle={toggle} onOpen={setSelected}/>} {view==='calendar'&&<CalendarView tasks={visible} onOpen={setSelected}/>}<div className="flex justify-end gap-2"><button disabled={!canAdmin} className="secondary disabled:opacity-40" onClick={()=>setConfirm({type:'archive'})}><Archive size={15}/> Archive</button><button disabled={!canAdmin} className="danger" onClick={()=>setConfirm({type:'delete'})}><Trash2 size={15}/> Delete project</button></div><TaskModal open={!!selected} task={selected?tasks.find(t=>t.id===selected.id):null} onClose={()=>setSelected(null)}/><Modal open={colModal} onClose={()=>setColModal(false)} title="Custom Kanban columns"><div className="space-y-2">{project.columns.map((c,i)=><div className="flex gap-2 items-center" key={c}><GripVertical size={15}/><input className="field" value={c} onChange={e=>updateProject(project.id,{columns:project.columns.map((x,j)=>j===i?e.target.value:x)})}/><button className="danger" onClick={()=>updateProject(project.id,{columns:project.columns.filter((_,j)=>j!==i)})}>Remove</button></div>)}<div className="flex gap-2 pt-2"><input className="field" placeholder="New column" value={newCol} onChange={e=>setNewCol(e.target.value)}/><button className="primary" onClick={addColumn}><Plus size={15}/></button></div></div></Modal><ConfirmDialog open={!!confirm} onClose={()=>setConfirm(null)} title={confirm?.type==='delete'?'Delete project?':confirm?.type==='archive'?'Archive project?':'Delete selected tasks?'} message="This action changes project data. Continue?" onConfirm={()=>{if(confirm.type==='delete')deleteProject(project.id);if(confirm.type==='archive')archiveProject(project.id);if(confirm.type==='bulk')bulkUpdate(checked,{_deleted:true})}}/></div>}
-function Kanban({project,tasks,canEdit,onOpen}){const{updateTask}=useWorkspace();return <div className="grid md:grid-cols-2 xl:grid-cols-4 gap-4 items-start">{project.columns.map(c=><div key={c} className="card p-3 min-h-52" onDragOver={e=>e.preventDefault()} onDrop={e=>{const id=e.dataTransfer.getData('id');if(id&&canEdit)updateTask(id,{status:c})}}><div className="flex justify-between pb-3"><b className="text-sm">{c}</b><span className="badge">{tasks.filter(t=>t.status===c).length}</span></div>{tasks.filter(t=>t.status===c).map(t=><div key={t.id} draggable={canEdit} onDragStart={e=>e.dataTransfer.setData('id',t.id)} onClick={()=>onOpen(t)} className="p-3 mb-2 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 cursor-pointer"><div className="font-medium text-sm">{t.title}</div><div className="text-xs text-slate-500 mt-2">{t.priority} · {t.dueDate||'No date'}</div></div>)}</div>)}</div>}
-function ListView({tasks,onOpen,group,checked,toggle}){const groups=group==='none'?{'All tasks':tasks}:tasks.reduce((a,t)=>{const k=group==='label'?(t.labels?.[0]||'No label'):t[group]||'Unassigned';(a[k]??=[]).push(t);return a},{});return <div className="space-y-3">{Object.entries(groups).map(([g,items])=><div className="card overflow-hidden" key={g}><div className="p-3 font-semibold border-b dark:border-slate-800">{g} <span className="badge ml-2">{items.length}</span></div>{items.map(t=><div key={t.id} className="grid grid-cols-[32px_1fr_140px_110px_120px] gap-2 p-3 border-b last:border-0 dark:border-slate-800 items-center hover:bg-slate-50 dark:hover:bg-slate-950"><input type="checkbox" checked={checked.includes(t.id)} onChange={()=>toggle(t.id)}/><button className="text-left font-medium" onClick={()=>onOpen(t)}>{t.title}<span className="block text-xs text-slate-500">{(t.labels||[]).join(', ')}</span></button><span className="text-sm text-slate-500">{t.status}</span><span className="text-sm text-slate-500">{t.priority}</span><span className="text-sm text-slate-500">{t.dueDate||'—'}</span></div>)}</div>)}</div>}
-function CalendarView({tasks,onOpen}){const [month,setMonth]=useState(new Date());const y=month.getFullYear(),m=month.getMonth(),days=new Date(y,m+1,0).getDate(),start=new Date(y,m,1).getDay();return <div className="card p-3"><div className="flex justify-between items-center mb-3"><button className="secondary" onClick={()=>setMonth(new Date(y,m-1,1))}>Previous</button><b>{month.toLocaleString(undefined,{month:'long',year:'numeric'})}</b><button className="secondary" onClick={()=>setMonth(new Date(y,m+1,1))}>Next</button></div><div className="grid grid-cols-7 gap-px bg-slate-200 dark:bg-slate-800 rounded-xl overflow-hidden">{['Sun','Mon','Tue','Wed','Thu','Fri','Sat'].map(x=><div className="bg-slate-100 dark:bg-slate-950 p-2 text-xs font-semibold" key={x}>{x}</div>)}{Array.from({length:start}).map((_,i)=><div className="bg-white dark:bg-slate-900 min-h-24" key={'e'+i}/>)}{Array.from({length:days},(_,i)=>i+1).map(d=><div className="bg-white dark:bg-slate-900 min-h-24 p-2" key={d}><div className="text-xs text-slate-400">{d}</div>{tasks.filter(t=>{const z=new Date(t.dueDate);return z.getFullYear()===y&&z.getMonth()===m&&z.getDate()===d}).map(t=><button key={t.id} onClick={()=>onOpen(t)} className="block w-full text-left text-xs mt-1 rounded-lg bg-blue-50 dark:bg-blue-950/40 p-1">{t.title}</button>)}</div>)}</div></div>}
+import React, { useEffect, useState } from 'react';
+import { useDispatch, useSelector } from 'react-redux';
+import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
+import { fetchTasks, setFilters, resetFilters } from '../features/tasks/taskSlice';
+import { setCurrentProject, setActiveView } from '../features/projects/projectSlice';
+import { openModal } from '../features/ui/uiSlice';
+import projectApi from '../services/projectApi';
+import KanbanBoard from '../components/kanban/KanbanBoard';
+import ListView from '../components/list/ListView';
+import CalendarView from '../components/calendar/CalendarView';
+import TaskDetailModal from '../components/task/TaskDetailModal';
+import Button from '../components/common/Button';
+import { Skeleton } from '../components/common/CommonStates';
+import usePermissions from '../hooks/usePermissions';
+import toast from 'react-hot-toast';
+
+import ViewKanbanOutlinedIcon from '@mui/icons-material/ViewKanbanOutlined';
+import FormatListBulletedIcon from '@mui/icons-material/FormatListBulleted';
+import CalendarTodayOutlinedIcon from '@mui/icons-material/CalendarTodayOutlined';
+import AddIcon from '@mui/icons-material/Add';
+import FilterListIcon from '@mui/icons-material/FilterList';
+import SearchIcon from '@mui/icons-material/Search';
+import ArchiveOutlinedIcon from '@mui/icons-material/ArchiveOutlined';
+import SettingsOutlinedIcon from '@mui/icons-material/SettingsOutlined';
+
+const VIEWS = [
+  { key: 'kanban', label: 'Kanban', Icon: ViewKanbanOutlinedIcon },
+  { key: 'list', label: 'List', Icon: FormatListBulletedIcon },
+  { key: 'calendar', label: 'Calendar', Icon: CalendarTodayOutlinedIcon },
+];
+
+const PRIORITY_OPTIONS = ['', 'critical', 'high', 'medium', 'low'];
+const STATUS_OPTIONS_PLACEHOLDER = '';
+
+const ProjectPage = () => {
+  const { projectId } = useParams();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const dispatch = useDispatch();
+  const navigate = useNavigate();
+
+  const { projects, currentProject, activeView } = useSelector((state) => state.projects);
+  const { currentWorkspace } = useSelector((state) => state.workspaces);
+  const { tasks, loading, filters } = useSelector((state) => state.tasks);
+  const { canEditTasks, canManageProjects } = usePermissions();
+
+  const [selectedTask, setSelectedTask] = useState(null);
+  const [showFilters, setShowFilters] = useState(false);
+  const [fetchingProject, setFetchingProject] = useState(false);
+
+  // Direct Project Refresh & Sync:
+  // Find project in Redux or fetch directly from API to prevent premature redirects
+  useEffect(() => {
+    if (!projectId) return;
+
+    if (currentProject?._id === projectId) return;
+
+    if (projects.length > 0) {
+      const found = projects.find((p) => p._id === projectId);
+      if (found) {
+        dispatch(setCurrentProject(found));
+        return;
+      }
+    }
+
+    // Direct fetch fallback for refresh or unlisted projects
+    let isMounted = true;
+    setFetchingProject(true);
+
+    projectApi
+      .getProjectById(projectId)
+      .then((res) => {
+        if (!isMounted) return;
+        const project = res.data?.data?.project || res.data?.project;
+        if (project) {
+          dispatch(setCurrentProject(project));
+        } else {
+          toast.error('Project not found');
+          navigate('/');
+        }
+      })
+      .catch((err) => {
+        if (!isMounted) return;
+        console.error('Failed to fetch project directly:', err);
+        toast.error(err.response?.data?.message || 'Project not found');
+        navigate('/');
+      })
+      .finally(() => {
+        if (isMounted) setFetchingProject(false);
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, [projectId, projects, currentProject?._id, dispatch, navigate]);
+
+  // View Persistence Priority:
+  // 1. URL ?view=...
+  // 2. project.defaultView or workspace.defaultView
+  // 3. localStorage last-used preference
+  // 4. Default 'kanban'
+  const urlView = searchParams.get('view');
+  const validViews = ['kanban', 'list', 'calendar'];
+
+  useEffect(() => {
+    let resolvedView = 'kanban';
+
+    if (urlView && validViews.includes(urlView)) {
+      resolvedView = urlView;
+    } else {
+      const projectDefault = currentProject?.defaultView;
+      const workspaceDefault = currentWorkspace?.defaultView;
+      const localPref = projectId ? localStorage.getItem(`view_${projectId}`) : null;
+
+      if (projectDefault && validViews.includes(projectDefault)) {
+        resolvedView = projectDefault;
+      } else if (workspaceDefault && validViews.includes(workspaceDefault)) {
+        resolvedView = workspaceDefault;
+      } else if (localPref && validViews.includes(localPref)) {
+        resolvedView = localPref;
+      } else {
+        resolvedView = 'kanban';
+      }
+    }
+
+    if (activeView !== resolvedView) {
+      dispatch(setActiveView(resolvedView));
+    }
+  }, [urlView, currentProject?._id, currentProject?.defaultView, currentWorkspace?.defaultView, projectId, dispatch]);
+
+  // Fetch tasks when the project changes
+  useEffect(() => {
+    if (currentProject?._id) {
+      dispatch(fetchTasks({ projectId: currentProject._id, params: filters }));
+    }
+  }, [dispatch, currentProject?._id]);
+
+  const handleViewChange = (view) => {
+    dispatch(setActiveView(view));
+    if (projectId) {
+      localStorage.setItem(`view_${projectId}`, view);
+    }
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev);
+      next.set('view', view);
+      return next;
+    });
+  };
+
+  const handleTaskClick = (task) => {
+    setSelectedTask(task);
+  };
+
+  const handleFilterChange = (key, value) => {
+    dispatch(setFilters({ [key]: value }));
+  };
+
+  const handleSearch = (e) => {
+    dispatch(setFilters({ search: e.target.value }));
+  };
+
+  const handleApplyFilters = () => {
+    if (currentProject?._id) {
+      dispatch(fetchTasks({ projectId: currentProject._id, params: filters }));
+    }
+  };
+
+  const handleResetFilters = () => {
+    dispatch(resetFilters());
+    if (currentProject?._id) {
+      dispatch(fetchTasks({ projectId: currentProject._id }));
+    }
+  };
+
+  if (!currentProject || fetchingProject) {
+    return (
+      <div className="p-6 space-y-4">
+        <Skeleton className="h-10 w-64" />
+        <div className="grid grid-cols-4 gap-4">
+          {[...Array(4)].map((_, i) => (
+            <Skeleton key={i} className="h-64" />
+          ))}
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex flex-col h-full min-h-0">
+      {/* Project Header */}
+      <div className="px-4 sm:px-6 py-4 border-b border-slate-200 dark:border-slate-800 bg-white dark:bg-[#0E1526] shrink-0">
+        <div className="flex flex-col sm:flex-row sm:items-center gap-3">
+          {/* Project Info */}
+          <div className="flex items-center gap-3 flex-1 min-w-0">
+            <div
+              className="w-9 h-9 rounded-xl flex items-center justify-center text-lg shadow-sm shrink-0"
+              style={{ backgroundColor: currentProject.color || '#6366f1' }}
+            >
+              {currentProject.icon || '📋'}
+            </div>
+            <div className="min-w-0">
+              <h2 className="font-bold text-slate-900 dark:text-slate-100 truncate">
+                {currentProject.name}
+              </h2>
+              {currentProject.description && (
+                <p className="text-xs text-slate-500 dark:text-slate-400 truncate">
+                  {currentProject.description}
+                </p>
+              )}
+            </div>
+          </div>
+
+          {/* Actions */}
+          <div className="flex items-center gap-2 shrink-0">
+            {canManageProjects && (
+              <button
+                onClick={() =>
+                  dispatch(openModal({ modalName: 'createProject', props: { project: currentProject } }))
+                }
+                className="p-2 rounded-xl text-slate-500 hover:text-slate-800 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+                title="Project Settings"
+              >
+                <SettingsOutlinedIcon style={{ fontSize: 18 }} />
+              </button>
+            )}
+            {canEditTasks && (
+              <Button
+                size="sm"
+                onClick={() => dispatch(openModal({ modalName: 'createTask' }))}
+              >
+                <AddIcon style={{ fontSize: 16 }} className="mr-1" />
+                Add Task
+              </Button>
+            )}
+          </div>
+        </div>
+
+        {/* View Switcher + Filters Row */}
+        <div className="flex items-center gap-3 mt-3">
+          {/* View Tabs */}
+          <div className="flex bg-slate-100 dark:bg-slate-800/60 rounded-xl p-0.5">
+            {VIEWS.map(({ key, label, Icon }) => (
+              <button
+                key={key}
+                id={`view-tab-${key}`}
+                onClick={() => handleViewChange(key)}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
+                  activeView === key
+                    ? 'bg-white dark:bg-slate-700 text-indigo-600 dark:text-indigo-400 shadow-sm'
+                    : 'text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200'
+                }`}
+              >
+                <Icon style={{ fontSize: 14 }} />
+                <span className="hidden sm:inline">{label}</span>
+              </button>
+            ))}
+          </div>
+
+          {/* Search */}
+          <div className="relative flex-1 max-w-xs hidden md:block">
+            <SearchIcon
+              className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400"
+              style={{ fontSize: 16 }}
+            />
+            <input
+              type="text"
+              placeholder="Search tasks..."
+              value={filters.search}
+              onChange={handleSearch}
+              onKeyDown={(e) => e.key === 'Enter' && handleApplyFilters()}
+              className="w-full pl-8 pr-3 py-1.5 text-xs rounded-xl bg-slate-100 dark:bg-slate-800/60 border border-transparent focus:border-indigo-500/50 focus:ring-2 focus:ring-indigo-500/20 text-slate-700 dark:text-slate-200 placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none transition-all"
+            />
+          </div>
+
+          {/* Filter Toggle */}
+          <button
+            onClick={() => setShowFilters(!showFilters)}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold transition-all ${
+              showFilters
+                ? 'bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400'
+                : 'text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800/60'
+            }`}
+          >
+            <FilterListIcon style={{ fontSize: 16 }} />
+            <span className="hidden sm:inline">Filters</span>
+          </button>
+        </div>
+
+        {/* Expanded Filters */}
+        {showFilters && (
+          <div className="flex flex-wrap items-center gap-3 mt-3 pt-3 border-t border-slate-100 dark:border-slate-800">
+            <select
+              value={filters.priority}
+              onChange={(e) => handleFilterChange('priority', e.target.value)}
+              className="px-3 py-1.5 rounded-xl text-xs font-medium bg-slate-100 dark:bg-slate-800 border border-transparent focus:border-indigo-500/50 text-slate-700 dark:text-slate-200 focus:outline-none"
+            >
+              <option value="">All Priorities</option>
+              {['critical', 'high', 'medium', 'low'].map((p) => (
+                <option key={p} value={p}>
+                  {p.charAt(0).toUpperCase() + p.slice(1)}
+                </option>
+              ))}
+            </select>
+
+            <select
+              value={filters.status}
+              onChange={(e) => handleFilterChange('status', e.target.value)}
+              className="px-3 py-1.5 rounded-xl text-xs font-medium bg-slate-100 dark:bg-slate-800 border border-transparent focus:border-indigo-500/50 text-slate-700 dark:text-slate-200 focus:outline-none"
+            >
+              <option value="">All Statuses</option>
+              {(currentProject.columns || []).map((col) => (
+                <option key={col.id} value={col.id}>
+                  {col.name}
+                </option>
+              ))}
+            </select>
+
+            <Button size="sm" onClick={handleApplyFilters}>
+              Apply
+            </Button>
+            <Button size="sm" variant="ghost" onClick={handleResetFilters}>
+              Reset
+            </Button>
+          </div>
+        )}
+      </div>
+
+      {/* View Content */}
+      <div className="flex-1 overflow-auto min-h-0 p-4 sm:p-6">
+        {loading ? (
+          <div className="flex gap-4">
+            {[...Array(4)].map((_, i) => (
+              <div key={i} className="w-72 shrink-0 space-y-3">
+                <Skeleton className="h-8" />
+                <Skeleton className="h-24" />
+                <Skeleton className="h-24" />
+                <Skeleton className="h-16" />
+              </div>
+            ))}
+          </div>
+        ) : (
+          <>
+            {activeView === 'kanban' && (
+              <KanbanBoard onTaskClick={handleTaskClick} />
+            )}
+            {activeView === 'list' && (
+              <ListView onTaskClick={handleTaskClick} />
+            )}
+            {activeView === 'calendar' && (
+              <CalendarView onTaskClick={handleTaskClick} />
+            )}
+          </>
+        )}
+      </div>
+
+      {/* Task Detail Modal */}
+      {selectedTask && (
+        <TaskDetailModal
+          taskId={selectedTask?._id || selectedTask}
+          task={selectedTask}
+          isOpen={!!selectedTask}
+          onClose={() => setSelectedTask(null)}
+        />
+      )}
+    </div>
+  );
+};
+
+export default ProjectPage;

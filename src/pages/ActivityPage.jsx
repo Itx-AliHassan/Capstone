@@ -1,1 +1,51 @@
-import {useState} from 'react';import {useWorkspace} from '../context/WorkspaceContext';export default function ActivityPage(){const{activities=[],users=[]}=useWorkspace()||{};const[user,setUser]=useState('all'),[action,setAction]=useState('all');const safeActivities=Array.isArray(activities)?activities:[];const safeUsers=Array.isArray(users)?users:[];const actions=[...new Set(safeActivities.map(a=>a.actionType).filter(Boolean))];const rows=safeActivities.filter(a=>(user==='all'||a.userId===user)&&(action==='all'||a.actionType===action));return <div className="space-y-5"><div><p className="text-sm text-slate-500">Audit trail</p><h1 className="text-2xl font-semibold">Activity</h1></div><div className="card p-3 flex gap-2"><select className="field w-auto" value={user} onChange={e=>setUser(e.target.value)}><option value="all">All users</option>{safeUsers.map(u=><option key={u.id} value={u.id}>{u.name||u.displayName||u.id}</option>)}</select><select className="field w-auto" value={action} onChange={e=>setAction(e.target.value)}><option value="all">All actions</option>{actions.map(a=><option key={a}>{a}</option>)}</select></div><div className="card divide-y dark:divide-slate-800">{rows.map(a=><div className="p-4 flex justify-between" key={a.id}><div><b className="text-sm">{a.actionType}</b><div className="text-xs text-slate-500 mt-1">User: {a.userId} {a.taskId&&` · Task: ${a.taskId}`} {a.projectId&&` · Project: ${a.projectId}`}</div></div><time className="text-xs text-slate-400">{new Date(a.timestamp).toLocaleString()}</time></div>)}{!rows.length&&<div className="empty">No activity yet. Changes will appear here.</div>}</div></div>}
+import React, { useEffect } from 'react';
+import { useDispatch, useSelector } from 'react-redux';
+import { useParams } from 'react-router-dom';
+import { ActivityFeed } from '../components/activity/ActivityFeed';
+import { fetchWorkspaces } from '../features/workspaces/workspaceSlice';
+
+import HistoryOutlinedIcon from '@mui/icons-material/HistoryOutlined';
+
+const ActivityPage = () => {
+  const { workspaceId: urlWorkspaceId } = useParams();
+  const dispatch = useDispatch();
+  const { currentWorkspace } = useSelector((state) => state.workspaces);
+
+  useEffect(() => {
+    if (!currentWorkspace) {
+      dispatch(fetchWorkspaces());
+    }
+  }, [dispatch, currentWorkspace]);
+
+  const wsId = urlWorkspaceId || currentWorkspace?._id;
+
+  return (
+    <div className="p-4 sm:p-6 xl:p-8 max-w-4xl mx-auto">
+      <div className="flex items-center gap-3 mb-6">
+        <div className="p-2.5 rounded-2xl bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400">
+          <HistoryOutlinedIcon />
+        </div>
+        <div>
+          <h2 className="text-xl font-bold text-slate-900 dark:text-slate-100">Activity Feed</h2>
+          <p className="text-sm text-slate-500 dark:text-slate-400">
+            Recent actions in{' '}
+            <span className="font-medium text-slate-700 dark:text-slate-300">
+              {currentWorkspace?.name || 'your workspace'}
+            </span>
+          </p>
+        </div>
+      </div>
+
+      {wsId ? (
+        <ActivityFeed />
+      ) : (
+        <div className="text-center py-16 text-slate-400">
+          <HistoryOutlinedIcon style={{ fontSize: 48 }} className="mb-3 opacity-30" />
+          <p className="text-sm">Select a workspace to view activity</p>
+        </div>
+      )}
+    </div>
+  );
+};
+
+export default ActivityPage;

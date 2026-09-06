@@ -1,1 +1,0 @@
-import {useEffect,useState} from 'react';export default function ToastHost(){const[msg,setMsg]=useState('');useEffect(()=>{const h=e=>{setMsg(e.detail);setTimeout(()=>setMsg(''),2500)};addEventListener('wm-toast',h);return()=>removeEventListener('wm-toast',h)},[]);return msg?<div className="fixed right-4 bottom-4 z-[70] card px-4 py-3 shadow-xl text-sm">{msg}</div>:null}
