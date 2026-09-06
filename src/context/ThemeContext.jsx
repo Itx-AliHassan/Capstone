@@ -1,12 +1,1 @@
-import { createContext, useContext, useEffect, useMemo, useState } from 'react'
-const ThemeContext = createContext(null)
-export function ThemeProvider({ children }) {
-  const [theme, setTheme] = useState(() => localStorage.getItem('wm-theme') || (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'))
-  useEffect(() => {
-    document.documentElement.classList.toggle('dark', theme === 'dark')
-    localStorage.setItem('wm-theme', theme)
-  }, [theme])
-  const value = useMemo(() => ({ theme, setTheme, toggleTheme: () => setTheme(t => t === 'dark' ? 'light' : 'dark') }), [theme])
-  return <ThemeContext.Provider value={value}>{children}</ThemeContext.Provider>
-}
-export const useTheme = () => useContext(ThemeContext)
+import {createContext,useContext,useEffect,useState} from 'react';const C=createContext(null);export function ThemeProvider({children}){const[theme,setTheme]=useState(localStorage.getItem('wm-theme')||'system');useEffect(()=>{const root=document.documentElement;const dark=theme==='dark'||(theme==='system'&&matchMedia('(prefers-color-scheme: dark)').matches);root.classList.toggle('dark',dark);localStorage.setItem('wm-theme',theme)},[theme]);const toggleTheme=()=>setTheme(t=>t==='dark'?'light':'dark');return <C.Provider value={{theme,setTheme,toggleTheme}}>{children}</C.Provider>}export const useTheme=()=>useContext(C)

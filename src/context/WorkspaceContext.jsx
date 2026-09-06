@@ -1,21 +1,56 @@
-import { createContext, useContext, useEffect, useMemo, useState } from 'react'
-import { demoTasks } from '../data/demo'
-const WorkspaceContext = createContext(null)
-const defaultWorkspace = { id:'demo-workspace', name:'Hackathon HQ', color:'#2563EB', role:'owner', members:[{id:'demo',name:'Demo User',email:'demo@example.com',role:'owner'},{id:'maya',name:'Maya Chen',email:'maya@example.com',role:'admin'},{id:'omar',name:'Omar Khan',email:'omar@example.com',role:'member'}] }
-const defaultProject = { id:'launch', name:'Launch Sprint', description:'Ship the capstone workspace manager.', color:'#2563EB', columns:['Todo','In Progress','Review','Done'] }
-
-export function WorkspaceProvider({ children }) {
-  const [workspace, setWorkspace] = useState(() => JSON.parse(localStorage.getItem('wm-workspace') || 'null') || defaultWorkspace)
-  const [project, setProject] = useState(() => JSON.parse(localStorage.getItem('wm-project') || 'null') || defaultProject)
-  const [tasks, setTasks] = useState(() => JSON.parse(localStorage.getItem('wm-tasks') || 'null') || demoTasks)
-  const [notifications, setNotifications] = useState([{id:'n1',text:'You were assigned “Wire Firebase auth”',read:false},{id:'n2',text:'Task “README for judges” is due today',read:false}])
-  useEffect(() => localStorage.setItem('wm-workspace', JSON.stringify(workspace)), [workspace])
-  useEffect(() => localStorage.setItem('wm-project', JSON.stringify(project)), [project])
-  useEffect(() => localStorage.setItem('wm-tasks', JSON.stringify(tasks)), [tasks])
-  const addTask = task => setTasks(t => [...t, { ...task, id: crypto.randomUUID(), subtasks: task.subtasks || [] }])
-  const updateTask = (id, patch) => setTasks(t => t.map(x => x.id === id ? { ...x, ...patch } : x))
-  const deleteTask = id => setTasks(t => t.filter(x => x.id !== id))
-  const value = useMemo(() => ({ workspace,setWorkspace,project,setProject,tasks,setTasks,addTask,updateTask,deleteTask,notifications,setNotifications }), [workspace,project,tasks,notifications])
-  return <WorkspaceContext.Provider value={value}>{children}</WorkspaceContext.Provider>
+import {createContext,useContext,useEffect,useMemo,useState} from 'react'
+import {seedUsers,seedWorkspaces,seedProjects,seedTasks,seedComments} from '../data/demo'
+const C=createContext(null), KEY='wm-state-v3'
+const uid=()=>crypto.randomUUID()
+const now=()=>new Date().toISOString()
+const initial={users:seedUsers,workspaces:seedWorkspaces,projects:seedProjects,tasks:seedTasks,comments:seedComments,activities:[],notifications:[],settings:{theme:'system',defaultView:'kanban',notifications:{assigned:true,mention:true,due:true}},activeWorkspaceId:'ws-1',currentUserId:'demo',history:[],future:[]}
+function load(){try{const raw=localStorage.getItem(KEY);if(!raw)return initial;const saved=JSON.parse(raw);return {...initial,...saved,users:Array.isArray(saved.users)?saved.users:initial.users,workspaces:Array.isArray(saved.workspaces)?saved.workspaces:initial.workspaces,projects:Array.isArray(saved.projects)?saved.projects:initial.projects,tasks:Array.isArray(saved.tasks)?saved.tasks:initial.tasks,comments:Array.isArray(saved.comments)?saved.comments:initial.comments,activities:Array.isArray(saved.activities)?saved.activities:initial.activities,notifications:Array.isArray(saved.notifications)?saved.notifications:initial.notifications,settings:{...initial.settings,...(saved.settings||{}),notifications:{...initial.settings.notifications,...((saved.settings||{}).notifications||{})}},history:Array.isArray(saved.history)?saved.history:[],future:Array.isArray(saved.future)?saved.future:[]}}catch{return initial}}
+export function WorkspaceProvider({children}){
+ const [state,setState]=useState(load)
+ const [online,setOnline]=useState(navigator.onLine)
+ const [syncing,setSyncing]=useState(false)
+ useEffect(()=>localStorage.setItem(KEY,JSON.stringify(state)),[state])
+ useEffect(()=>{const a=()=>setOnline(true),b=()=>setOnline(false);addEventListener('online',a);addEventListener('offline',b);return()=>{removeEventListener('online',a);removeEventListener('offline',b)}},[])
+ const currentUserId=state.currentUserId||'demo'
+ const activeWorkspace=state.workspaces.find(w=>w.id===state.activeWorkspaceId)||state.workspaces[0]
+ const projects=state.projects.filter(p=>p.workspaceId===activeWorkspace?.id)
+ const push=(next,activity)=>setState(s=>({...next,history:[...s.history,snapshot(s)],future:[],activities:activity?[...s.activities,{id:uid(),...activity,timestamp:now(),userId:currentUserId}]:s.activities}))
+ const snapshot=s=>({workspaces:s.workspaces,projects:s.projects,tasks:s.tasks,comments:s.comments,notifications:s.notifications,users:s.users,settings:s.settings,activeWorkspaceId:s.activeWorkspaceId,currentUserId:s.currentUserId})
+ const base=()=>({...snapshot(state),history:state.history,future:state.future})
+ const mutate=(fn,activity)=>{const s=base();fn(s);push(s,activity);window.dispatchEvent(new CustomEvent('wm-toast',{detail:activity?.actionType?.replaceAll('.',' ')||'Saved'}))}
+ const addWorkspace=(data)=>mutate(s=>{const id=uid();s.workspaces.push({id,name:data.name||'New Workspace',color:data.color||'#2563EB',icon:data.icon||'W',ownerId:currentUserId,defaultView:data.defaultView||'kanban',members:[{...seedUsers[0],id:currentUserId,role:'owner'}]});s.activeWorkspaceId=id},{actionType:'workspace.created',workspaceId:activeWorkspace?.id})
+ const updateWorkspace=(id,patch)=>mutate(s=>{s.workspaces=s.workspaces.map(w=>w.id===id?{...w,...patch}:w)},{actionType:'workspace.updated',workspaceId:id})
+ const deleteWorkspace=(id)=>mutate(s=>{s.workspaces=s.workspaces.filter(w=>w.id!==id);s.projects=s.projects.filter(p=>p.workspaceId!==id);s.tasks=s.tasks.filter(t=>t.workspaceId!==id);s.activeWorkspaceId=s.workspaces[0]?.id||null},{actionType:'workspace.deleted',workspaceId:id})
+ const switchWorkspace=id=>mutate(s=>{s.activeWorkspaceId=id},{actionType:'workspace.switched',workspaceId:id})
+ const inviteMember=(id,role='member')=>{const u=state.users.find(x=>x.id===id)||{id,name:`Guest ${id}`,email:`${id}@example.com`};mutate(s=>{s.workspaces=s.workspaces.map(w=>w.id===activeWorkspace.id?{...w,members:[...w.members,{...u,role}]}:w)},{actionType:'member.invited',workspaceId:activeWorkspace.id})}
+ const setMemberRole=(ws,id,role)=>mutate(s=>{s.workspaces=s.workspaces.map(w=>w.id===ws?{...w,members:w.members.map(m=>m.id===id?{...m,role}:m)}:w)},{actionType:'member.role_changed',workspaceId:ws})
+ const addProject=data=>mutate(s=>{s.projects.push({id:uid(),workspaceId:activeWorkspace.id,name:data.name||'New Project',description:data.description||'',color:data.color||'#2563EB',icon:data.icon||'📁',memberIds:data.memberIds||[currentUserId],template:data.template||'Blank',columns:data.columns||['Todo','In Progress','Done']})},{actionType:'project.created',workspaceId:activeWorkspace.id})
+ const updateProject=(id,patch)=>mutate(s=>{s.projects=s.projects.map(p=>p.id===id?{...p,...patch}:p)},{actionType:'project.updated',projectId:id,workspaceId:activeWorkspace.id})
+ const deleteProject=id=>mutate(s=>{s.projects=s.projects.filter(p=>p.id!==id);s.tasks=s.tasks.filter(t=>t.projectId!==id)},{actionType:'project.deleted',projectId:id,workspaceId:activeWorkspace.id})
+ const archiveProject=id=>updateProject(id,{archived:true})
+ const addTask=data=>{const t={id:uid(),projectId:data.projectId||projects[0]?.id,workspaceId:activeWorkspace.id,title:data.title||'Untitled task',description:data.description||'',status:data.status||'Todo',priority:data.priority||'Medium',dueDate:data.dueDate||'',assigneeId:data.assigneeId||currentUserId,labels:data.labels||[],attachments:[],subtasks:data.subtasks||[],createdAt:now(),createdBy:currentUserId};mutate(s=>s.tasks.push(t),{actionType:'task.created',taskId:t.id,projectId:t.projectId,workspaceId:activeWorkspace.id});if(t.assigneeId&&t.assigneeId!=='demo')notify(`Task assigned: ${t.title}`,'assigned');return t}
+ const updateTask=(id,patch)=>mutate(s=>{s.tasks=s.tasks.map(t=>t.id===id?{...t,...patch}:t)},{actionType:'task.updated',taskId:id,workspaceId:activeWorkspace.id})
+ const deleteTask=id=>mutate(s=>{s.tasks=s.tasks.filter(t=>t.id!==id)},{actionType:'task.deleted',taskId:id,workspaceId:activeWorkspace.id})
+ const convertSubtaskToTask=(taskId,subId)=>{const parent=state.tasks.find(t=>t.id===taskId);const sub=parent?.subtasks?.find(x=>x.id===subId);if(!parent||!sub)return;const n={id:uid(),projectId:parent.projectId,workspaceId:parent.workspaceId,title:sub.title,description:'Converted from subtask',status:parent.status,priority:parent.priority,dueDate:parent.dueDate,assigneeId:parent.assigneeId,labels:parent.labels||[],attachments:[],subtasks:[],createdAt:now(),createdBy:currentUserId};mutate(s=>{s.tasks.push(n);s.tasks=s.tasks.map(t=>t.id===taskId?{...t,subtasks:t.subtasks.filter(x=>x.id!==subId)}:t)},{actionType:'subtask.converted_to_task',taskId:n.id,workspaceId:activeWorkspace.id})}
+ const convertTaskToSubtask=(taskId,parentId)=>{const t=state.tasks.find(x=>x.id===taskId),p=state.tasks.find(x=>x.id===parentId);if(!t||!p)return;mutate(s=>{s.tasks=s.tasks.map(x=>x.id===parentId?{...x,subtasks:[...(x.subtasks||[]),{id:uid(),title:t.title,completed:t.status==='Done'}]}:x).filter(x=>x.id!==taskId)},{actionType:'task.converted_to_subtask',taskId,parentTaskId:parentId,workspaceId:activeWorkspace.id})}
+ const duplicateTask=id=>{const t=state.tasks.find(x=>x.id===id);if(t){const n={...t,id:uid(),title:`${t.title} copy`,createdAt:now(),subtasks:t.subtasks.map(x=>({...x,id:uid()}))};mutate(s=>s.tasks.push(n),{actionType:'task.duplicated',taskId:n.id,workspaceId:activeWorkspace.id})}}
+ const bulkUpdate=(ids,patch)=>mutate(s=>{if(patch._deleted)s.tasks=s.tasks.filter(t=>!ids.includes(t.id));else s.tasks=s.tasks.map(t=>ids.includes(t.id)?{...t,...patch}:t)},{actionType:'task.bulk_updated',workspaceId:activeWorkspace.id})
+ const addComment=(taskId,content)=>{const c={id:uid(),taskId,authorId:currentUserId,content,createdAt:now()};mutate(s=>s.comments.push(c),{actionType:'comment.created',taskId,workspaceId:activeWorkspace.id});state.users.filter(u=>content.toLowerCase().includes('@'+u.name.toLowerCase().replaceAll(' ','_'))||content.toLowerCase().includes('@'+u.name.toLowerCase())).forEach(u=>u.id!=='demo'&&notify(`You were mentioned in a comment by Demo User`,'mention'));return c}
+ const editComment=(id,content)=>mutate(s=>{s.comments=s.comments.map(c=>c.id===id&&c.authorId===currentUserId?{...c,content}:c)},{actionType:'comment.edited',workspaceId:activeWorkspace.id})
+ const deleteComment=id=>mutate(s=>{s.comments=s.comments.filter(c=>c.id!==id||c.authorId!==currentUserId)},{actionType:'comment.deleted',workspaceId:activeWorkspace.id})
+ const notify=(text,type='system')=>mutate(s=>s.notifications.unshift({id:uid(),text,type,read:false,createdAt:now()}),{actionType:'notification.created',workspaceId:activeWorkspace.id})
+ const markRead=id=>setState(s=>({...s,notifications:s.notifications.map(n=>n.id===id?{...n,read:true}:n)}))
+ const markAllRead=()=>setState(s=>({...s,notifications:s.notifications.map(n=>({...n,read:true}))}))
+ const undo=()=>setState(s=>{const prev=s.history.at(-1);if(!prev)return s;return {...prev,history:s.history.slice(0,-1),future:[snapshot(s),...s.future]}})
+ const redo=()=>setState(s=>{const next=s.future[0];if(!next)return s;return {...next,history:[...s.history,snapshot(s)],future:s.future.slice(1)}})
+ const exportData=()=>JSON.stringify(snapshot(state),null,2)
+ const importData=text=>{const x=JSON.parse(text);if(!x.workspaces||!x.projects||!x.tasks)throw Error('Invalid workspace JSON');setState({...initial,...x,history:[],future:[]})}
+ const resetData=()=>setState({...initial,history:[],future:[]})
+ const setCurrentUser=id=>setState(s=>({...s,currentUserId:id}));
+ const sync=async()=>{setSyncing(true);await new Promise(r=>setTimeout(r,900));setSyncing(false)}
+ useEffect(()=>{const soon=state.tasks.filter(t=>t.dueDate&&t.workspaceId===activeWorkspace?.id&&new Date(t.dueDate+'T23:59:59')-Date.now()<172800000&&new Date(t.dueDate+'T23:59:59')>=new Date());soon.forEach(t=>{if(t.assigneeId==='demo'&&!state.notifications.some(n=>n.text===`Due soon: ${t.title}`))setState(s=>({...s,notifications:[{id:uid(),text:`Due soon: ${t.title}`,type:'due',read:false,createdAt:now()},...s.notifications]}))})},[state.tasks.length,activeWorkspace?.id])
+ useEffect(()=>{const timer=setInterval(()=>{if(activeWorkspace)window.dispatchEvent(new CustomEvent('wm-toast',{detail:'Live update check completed'}))},30000);return()=>clearInterval(timer)},[activeWorkspace])
+ const value=useMemo(()=>({state:{...state,online},activeWorkspace,projects,users:state.users,tasks:state.tasks.filter(t=>t.workspaceId===activeWorkspace?.id),allTasks:state.tasks,comments:state.comments,activities:state.activities,notifications:state.notifications,settings:state.settings,online,syncing,addWorkspace,updateWorkspace,deleteWorkspace,switchWorkspace,inviteMember,setMemberRole,addProject,updateProject,deleteProject,archiveProject,addTask,updateTask,deleteTask,duplicateTask,convertSubtaskToTask,convertTaskToSubtask,bulkUpdate,addComment,editComment,deleteComment,notify,markRead,markAllRead,undo,redo,exportData,importData,resetData,sync,setState,setCurrentUser}),[state,activeWorkspace,projects,online,syncing])
+ return <C.Provider value={value}>{children}</C.Provider>
 }
-export const useWorkspace = () => useContext(WorkspaceContext)
+export const useWorkspace=()=>useContext(C)

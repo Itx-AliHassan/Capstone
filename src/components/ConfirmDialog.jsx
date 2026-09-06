@@ -1,0 +1,2 @@
+import Modal from './Modal'
+export default function ConfirmDialog({open,title,message,onConfirm,onClose,danger=true}){return <Modal open={open} onClose={onClose} title={title}><p className="text-sm text-slate-500">{message}</p><div className="flex justify-end gap-2 mt-6"><button className="secondary" onClick={onClose}>Cancel</button><button className={danger?'danger':'primary'} onClick={()=>{onConfirm();onClose()}}>Confirm</button></div></Modal>}

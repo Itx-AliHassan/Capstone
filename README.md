@@ -124,3 +124,9 @@ Check every `VITE_FIREBASE_*` value in `.env` and restart Vite after changing en
 ### Cloudinary errors
 
 Check `VITE_CLOUDINARY_CLOUD_NAME` and `VITE_CLOUDINARY_UPLOAD_PRESET`. The preset must allow unsigned browser uploads.
+
+## Feature Coverage Added
+
+This version expands the demo to cover the capstone feature domains: workspace create/rename/delete/switching, member invitations and roles, project create/edit/archive/delete/templates/member assignment, task CRUD, subtasks and conversion, duplicate and bulk task actions, custom Kanban columns, Kanban/List/Calendar views, filtering/grouping/sorting and saved presets, global search, RBAC/access denied, activity logs, comments and mentions, notifications/preferences, undo/redo, optimistic local updates, toast feedback, offline detection and simulated sync, JSON import/export/reset, command palette, keyboard/theme controls, responsive layout, empty states and destructive confirmations.
+
+Firebase Auth/Firestore and Cloudinary integration remain configurable through `.env`. When Firebase credentials are not supplied, the app uses a local demo authentication mode so the UI can still be demonstrated during a hackathon. The Firestore service helpers are in `src/services/firestore.js` for connecting the same entities to the requested collections.
