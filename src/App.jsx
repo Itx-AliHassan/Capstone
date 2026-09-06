@@ -1,0 +1,13 @@
+import { Route, Routes } from 'react-router-dom'
+import AppLayout from './components/AppLayout'
+import ProtectedRoute from './components/ProtectedRoute'
+import LoginPage from './pages/LoginPage'
+import SignupPage from './pages/SignupPage'
+import DashboardPage from './pages/DashboardPage'
+import ProjectPage from './pages/ProjectPage'
+import WorkspaceSettingsPage from './pages/WorkspaceSettingsPage'
+import ActivityPage from './pages/ActivityPage'
+import ProfilePage from './pages/ProfilePage'
+import UnauthorizedPage from './pages/UnauthorizedPage'
+import NotFoundPage from './pages/NotFoundPage'
+export default function App(){return <Routes><Route path="/login" element={<LoginPage/>}/><Route path="/signup" element={<SignupPage/>}/><Route path="/unauthorized" element={<UnauthorizedPage/>}/><Route element={<ProtectedRoute><AppLayout/></ProtectedRoute>}><Route index element={<DashboardPage/>}/><Route path="/workspace/:workspaceId/project/:projectId" element={<ProjectPage/>}/><Route path="/workspace/settings" element={<ProtectedRoute minRole="admin"><WorkspaceSettingsPage/></ProtectedRoute>}/><Route path="/activity" element={<ActivityPage/>}/><Route path="/profile" element={<ProfilePage/>}/></Route><Route path="*" element={<NotFoundPage/>}/></Routes>}
