@@ -286,13 +286,23 @@ export const SettingsPage = () => {
   return (
     <div className="max-w-6xl mx-auto p-4 sm:p-6 lg:p-8 space-y-6">
       {/* Header */}
-      <div>
-        <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-100">
-          Settings
-        </h1>
-        <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
-          Manage your personal account, workspace configuration, and preferences
-        </p>
+      <div className="flex flex-wrap items-end justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-100">
+            Settings
+          </h1>
+          <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
+            Manage your personal account, workspace configuration, and preferences
+          </p>
+        </div>
+        <a
+          href="https://drive.google.com/file/d/16h4KfTS27tsNNDD8m4NENlePOhGCrQRE/view?usp=sharing"
+          target="_blank"
+          rel="noreferrer"
+          className="inline-flex items-center rounded-xl bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 dark:focus:ring-offset-slate-950"
+        >
+          Open the README file of this project
+        </a>
       </div>
 
       {/* Main Settings Grid */}
